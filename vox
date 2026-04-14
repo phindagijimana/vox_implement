@@ -1,0 +1,159 @@
+#!/usr/bin/env bash
+# vox — install/run helpers for voxTool in this workspace.
+# Usage: ./vox install | check | start [-f] | stop | logs [--no-follow]
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+STATE="$ROOT/.vox"
+PID_FILE="$STATE/voxtool.pid"
+LOG_FILE="$STATE/voxtool.log"
+MAMBA_DIR="$ROOT/.micromamba"
+MAMBA="$MAMBA_DIR/micromamba"
+ENV_PREFIX="$ROOT/voxtool-env"
+ENV_YML="$ROOT/environment.yml"
+APP_DIR="$ROOT/voxTool"
+PY="$ENV_PREFIX/bin/python"
+
+micromamba_bootstrap() {
+  local url arch
+  arch="$(uname -m)"
+  case "$arch" in
+    x86_64) url="https://micro.mamba.pm/api/micromamba/linux-64/latest" ;;
+    aarch64|arm64) url="https://micro.mamba.pm/api/micromamba/linux-aarch64/latest" ;;
+    *)
+      echo "Unsupported arch: $arch (install micromamba manually and put it at $MAMBA)" >&2
+      exit 1
+      ;;
+  esac
+  mkdir -p "$MAMBA_DIR"
+  echo "Downloading micromamba -> $MAMBA"
+  curl -Ls "$url" | tar -xvj -C "$MAMBA_DIR" --strip-components=1 bin/micromamba
+  chmod +x "$MAMBA"
+}
+
+cmd_install() {
+  if [[ ! -x "$MAMBA" ]]; then
+    micromamba_bootstrap
+  fi
+  if [[ ! -f "$ENV_YML" ]]; then
+    echo "Missing $ENV_YML" >&2
+    exit 1
+  fi
+  if [[ ! -x "$PY" ]]; then
+    echo "Creating conda env at $ENV_PREFIX ..."
+    "$MAMBA" create -y -p "$ENV_PREFIX" -f "$ENV_YML"
+  else
+    echo "Env already exists: $ENV_PREFIX (remove it to recreate)"
+  fi
+  cmd_check
+}
+
+cmd_check() {
+  local ok=0
+  [[ -d "$APP_DIR" ]] || { echo "MISSING: voxTool/ (clone pennmem/voxTool here)"; ok=1; }
+  [[ -x "$PY" ]] || { echo "MISSING: $PY — run: $0 install"; ok=1; }
+  if [[ -x "$PY" ]]; then
+    echo "Python: $($PY -V)"
+    if QT_QPA_PLATFORM=offscreen "$PY" -c "
+import os, sys
+sys.path.insert(0, r'$APP_DIR')
+os.environ.setdefault('ETS_TOOLKIT', 'qt')
+from view.pyloc import PylocControl
+print('import PylocControl: ok')
+" 2>/dev/null; then
+      echo "Import check: ok"
+    else
+      echo "Import check: FAILED (run with QT_QPA_PLATFORM=offscreen for details)"
+      ok=1
+    fi
+  fi
+  if [[ -n "${DISPLAY:-}" ]]; then
+    echo "DISPLAY=$DISPLAY"
+  else
+    echo "DISPLAY is unset — GUI needs a desktop session or X forwarding."
+  fi
+  if [[ "$ok" -ne 0 ]]; then
+    exit 1
+  fi
+  echo "check: all good"
+}
+
+cmd_start() {
+  local foreground=0
+  if [[ "${1:-}" == "-f" || "${1:-}" == "--foreground" ]]; then
+    foreground=1
+  fi
+  cmd_check
+  if [[ ! -f "$APP_DIR/launch_pyloc.py" ]]; then
+    echo "Missing $APP_DIR/launch_pyloc.py" >&2
+    exit 1
+  fi
+  if [[ -f "$PID_FILE" ]]; then
+    local old
+    old="$(cat "$PID_FILE" 2>/dev/null || true)"
+    if [[ -n "$old" ]] && kill -0 "$old" 2>/dev/null; then
+      echo "Already running (pid $old). Stop first or use: $0 start -f" >&2
+      exit 1
+    fi
+  fi
+  mkdir -p "$STATE"
+  if [[ "$foreground" -eq 1 ]]; then
+    echo "Starting voxTool (foreground) ..."
+    cd "$APP_DIR"
+    exec "$PY" launch_pyloc.py
+  fi
+  echo "Starting voxTool in background — log: $LOG_FILE"
+  cd "$APP_DIR"
+  nohup "$PY" launch_pyloc.py >>"$LOG_FILE" 2>&1 &
+  echo $! >"$PID_FILE"
+  echo "pid $(cat "$PID_FILE")"
+}
+
+cmd_stop() {
+  if [[ ! -f "$PID_FILE" ]]; then
+    echo "No pid file (not started in background?)" >&2
+    exit 1
+  fi
+  local pid
+  pid="$(cat "$PID_FILE")"
+  if kill -0 "$pid" 2>/dev/null; then
+    kill "$pid" && echo "Sent SIGTERM to $pid"
+    sleep 1
+    if kill -0 "$pid" 2>/dev/null; then
+      kill -9 "$pid" && echo "Sent SIGKILL to $pid"
+    fi
+  else
+    echo "Process $pid not running"
+  fi
+  rm -f "$PID_FILE"
+}
+
+cmd_logs() {
+  mkdir -p "$STATE"
+  if [[ ! -f "$LOG_FILE" ]]; then
+    echo "No log yet: $LOG_FILE"
+    exit 0
+  fi
+  if [[ "${1:-}" == "--no-follow" ]]; then
+    cat "$LOG_FILE"
+  else
+    tail -f "$LOG_FILE"
+  fi
+}
+
+usage() {
+  echo "Usage: $0 {install|check|start [-f]|stop|logs [--no-follow]}"
+  echo "  start run in background (logs -> $LOG_FILE); use -f for foreground GUI"
+  echo "  On a desktop, ensure DISPLAY is set (e.g. export DISPLAY=:0)."
+}
+
+case "${1:-}" in
+  install) cmd_install ;;
+  check) cmd_check ;;
+  start) shift; cmd_start "${@:-}" ;;
+  stop) cmd_stop ;;
+  logs) shift; cmd_logs "${@:-}" ;;
+  ""|-h|--help) usage; exit 0 ;;
+  *) usage; exit 1 ;;
+esac

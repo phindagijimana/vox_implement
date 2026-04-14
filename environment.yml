@@ -1,0 +1,24 @@
+# Modern Python 3 stack for voxTool (replaces upstream Python 2.7 conda_env.yml).
+# Create: micromamba create -y -f environment.yml -p ./voxtool-env
+# Or:     micromamba create -y -f environment.yml -n vt
+name: vt
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - vtk
+  - pyqt
+  - mayavi
+  - traitsui
+  - pyface
+  - envisage
+  - traits
+  - numpy
+  - scipy
+  - nibabel
+  - matplotlib
+  - pyyaml
+  - apptools
+  - configobj
+  - pygments
+  - sip
