@@ -6,7 +6,7 @@
 
 ## Why the upstream installer no longer works as-is
 
-- `conda_env.yml` pins **Python 2.7**, **PyQt4**, old **VTK**, and the deprecated **`free`** channel. On current Anaconda/conda-forge that environment is **not reproducible** on RHEL 9–class systems, and **system Python is3.x only**.
+- `conda_env.yml` pins **Python 2.7**, **PyQt4**, old **VTK**, and the deprecated **`free`** channel. On current Anaconda/conda-forge that environment is **not reproducible** on RHEL 9–class systems, and **system Python is 3.x only**.
 
 ## What we did here
 
