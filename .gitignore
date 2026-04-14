@@ -1,3 +1,8 @@
 voxtool-env/
 .micromamba/
 .vox/
+
+# Local-only notes (not published on GitHub)
+desktop.md
+sustain_br.md
+build_reviewer.docx
