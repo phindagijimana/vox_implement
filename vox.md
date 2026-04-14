@@ -16,6 +16,6 @@
 6. **Add micro-contacts** where needed for macro/micro leads.
 7. **Save** localized coordinates; if **Include Bipolar Pairs** is enabled, midpoints of neighboring pairs are saved too.
 
-**Environment and launch (from upstream README):** Conda environment `vt` via `setup_env.sh`, then `conda activate vt` and `python launch_pyloc.py`.
+**Environment and launch (this repo):** see root **README.md** (`./vox install`, `./vox start -f`). Upstream originally used Conda env `vt` via `setup_env.sh`.
 
 **Reference:** [https://github.com/pennmem/voxTool](https://github.com/pennmem/voxTool)
